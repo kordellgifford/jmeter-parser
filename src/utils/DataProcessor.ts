@@ -8,6 +8,17 @@ export interface ProcessedData {
   percentileData: { percentile: number; value: number }[];
   errorRateOverTime: { timestamp: string; errorRate: number }[];
   responseTimeOutliers: { timestamp: string; elapsed: number }[];
+  errorBreakdown: { responseCode: number; count: number; percentage: string }[];
+  threadMetrics: {
+    timestamp: string;
+    threadCount: number;
+    avgResponseTime: number;
+  }[];
+  bandwidthMetrics: {
+    timestamp: string;
+    bytesPerSecond: number;
+    sentBytesPerSecond: number;
+  }[];
 }
 
 export const processJMeterData = (rawData: JMeterRecord[]): ProcessedData => {
@@ -27,38 +38,48 @@ export const processJMeterData = (rawData: JMeterRecord[]): ProcessedData => {
 
   // Total data transferred
   const totalBytes = _.sumBy(rawData, 'bytes');
+  const totalSentBytes = _.sumBy(rawData, 'sentBytes');
   const totalKB = totalBytes / 1024;
 
-  // Basic stats
-  const stats: PerformanceStats = {
-    totalRequests: rawData.length,
-    successfulRequests: rawData.filter(row => row.success).length,
-    failedRequests: rawData.filter(row => !row.success).length,
-    averageResponseTime: mean.toFixed(2),
-    maxResponseTime: _.maxBy(rawData, 'elapsed')?.elapsed ?? 0,
-    minResponseTime: _.minBy(rawData, 'elapsed')?.elapsed ?? 0,
-    medianResponseTime: responseTimeValues[Math.floor(responseTimeValues.length / 2)],
-    errorRate: ((rawData.filter(row => !row.success).length / rawData.length) * 100).toFixed(2),
-    percentile90: responseTimeValues[Math.floor(responseTimeValues.length * 0.9)],
-    percentile95: responseTimeValues[Math.floor(responseTimeValues.length * 0.95)],
-    percentile99: responseTimeValues[Math.floor(responseTimeValues.length * 0.99)],
-    standardDeviation,
-    requestsPerSecond,
-    peakConcurrentUsers: _.maxBy(rawData, 'allThreads')?.allThreads ?? 0,
-    avgConnectTime: _.meanBy(rawData, 'Connect').toFixed(2),
-    avgLatency: _.meanBy(rawData, 'Latency').toFixed(2),
-    totalDataTransferred: totalKB.toFixed(2),
-    avgThroughput: requestsPerSecond.toFixed(2),
-    avgThreads: _.meanBy(rawData, 'allThreads').toFixed(1)
-  };
+  // Error breakdown by response code
+  const errorBreakdown = _(rawData)
+    .groupBy('responseCode')
+    .map((group, code) => ({
+      responseCode: parseInt(code),
+      count: group.length,
+      percentage: ((group.length / rawData.length) * 100).toFixed(1)
+    }))
+    .value();
 
-  // Generate percentile distribution data
+  // Thread metrics over time
+  const threadMetrics = _(rawData)
+    .groupBy(row => Math.floor(row.timeStamp / 1000) * 1000)
+    .map((group, timestamp) => ({
+      timestamp: new Date(parseInt(timestamp)).toISOString(),
+      threadCount: _.meanBy(group, 'allThreads'),
+      avgResponseTime: _.meanBy(group, 'elapsed')
+    }))
+    .value();
+
+  // Bandwidth metrics over time
+  const bandwidthMetrics = _(rawData)
+    .groupBy(row => Math.floor(row.timeStamp / 1000) * 1000)
+    .map((group, timestamp) => ({
+      timestamp: new Date(parseInt(timestamp)).toISOString(),
+      bytesPerSecond: _.sumBy(group, 'bytes') / 1000,
+      sentBytesPerSecond: _.sumBy(group, 'sentBytes') / 1000
+    }))
+    .value();
+
+  // Calculate percentile distribution data
   const percentileData = [
-    { percentile: 50, value: stats.medianResponseTime },
-    { percentile: 90, value: stats.percentile90 },
-    { percentile: 95, value: stats.percentile95 },
-    { percentile: 99, value: stats.percentile99 },
-    { percentile: 100, value: stats.maxResponseTime }
+    { percentile: 50, value: responseTimeValues[Math.floor(responseTimeValues.length * 0.5)] },
+    { percentile: 75, value: responseTimeValues[Math.floor(responseTimeValues.length * 0.75)] },
+    { percentile: 90, value: responseTimeValues[Math.floor(responseTimeValues.length * 0.9)] },
+    { percentile: 95, value: responseTimeValues[Math.floor(responseTimeValues.length * 0.95)] },
+    { percentile: 99, value: responseTimeValues[Math.floor(responseTimeValues.length * 0.99)] },
+    { percentile: 99.9, value: responseTimeValues[Math.floor(responseTimeValues.length * 0.999)] },
+    { percentile: 100, value: responseTimeValues[responseTimeValues.length - 1] }
   ];
 
   // Calculate outliers (responses > 2 standard deviations from mean)
@@ -89,17 +110,47 @@ export const processJMeterData = (rawData: JMeterRecord[]): ProcessedData => {
     threads: row.allThreads
   }));
 
-  // Distribution data
+  // Distribution data with more granular buckets
   const distributionData = Object.entries(_.countBy(rawData, row => {
-    if (row.elapsed < 150) return '<150ms';
-    if (row.elapsed < 200) return '150-200ms';
-    if (row.elapsed < 250) return '200-250ms';
-    return '>250ms';
+    if (row.elapsed < 100) return '<100ms';
+    if (row.elapsed < 200) return '100-200ms';
+    if (row.elapsed < 300) return '200-300ms';
+    if (row.elapsed < 500) return '300-500ms';
+    if (row.elapsed < 1000) return '500ms-1s';
+    return '>1s';
   })).map(([range, count]) => ({
     range,
     count,
     percentage: ((count / rawData.length) * 100).toFixed(1)
   }));
+
+  // Enhanced stats object with additional metrics
+  const stats: PerformanceStats = {
+    totalRequests: rawData.length,
+    successfulRequests: rawData.filter(row => row.success).length,
+    failedRequests: rawData.filter(row => !row.success).length,
+    averageResponseTime: mean.toFixed(2),
+    maxResponseTime: _.maxBy(rawData, 'elapsed')?.elapsed ?? 0,
+    minResponseTime: _.minBy(rawData, 'elapsed')?.elapsed ?? 0,
+    medianResponseTime: responseTimeValues[Math.floor(responseTimeValues.length / 2)],
+    errorRate: ((rawData.filter(row => !row.success).length / rawData.length) * 100).toFixed(2),
+    percentile90: responseTimeValues[Math.floor(responseTimeValues.length * 0.9)],
+    percentile95: responseTimeValues[Math.floor(responseTimeValues.length * 0.95)],
+    percentile99: responseTimeValues[Math.floor(responseTimeValues.length * 0.99)],
+    standardDeviation,
+    requestsPerSecond,
+    peakConcurrentUsers: _.maxBy(rawData, 'allThreads')?.allThreads ?? 0,
+    avgConnectTime: _.meanBy(rawData, 'Connect').toFixed(2),
+    avgLatency: _.meanBy(rawData, 'Latency').toFixed(2),
+    totalDataTransferred: (totalKB / 1024).toFixed(2) + ' MB',
+    avgThroughput: requestsPerSecond.toFixed(2),
+    avgThreads: _.meanBy(rawData, 'allThreads').toFixed(1),
+    totalBandwidthMbps: ((totalBytes + totalSentBytes) / testDurationSecs / 125000).toFixed(2),
+    avgBandwidthPerUser: ((totalBytes + totalSentBytes) / rawData.length / 1024).toFixed(2) + ' KB',
+    testDuration: (testDurationSecs / 1000).toFixed(2) + ' seconds',
+    erroneousResponses: errorBreakdown.filter(e => e.responseCode >= 400).length,
+    successfulResponseRate: ((rawData.filter(r => r.responseCode < 400).length / rawData.length) * 100).toFixed(2) + '%'
+  };
 
   return {
     stats,
@@ -107,6 +158,9 @@ export const processJMeterData = (rawData: JMeterRecord[]): ProcessedData => {
     distributionData,
     percentileData,
     errorRateOverTime,
-    responseTimeOutliers
+    responseTimeOutliers,
+    errorBreakdown,
+    threadMetrics,
+    bandwidthMetrics
   };
 };

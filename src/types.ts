@@ -1,4 +1,4 @@
-// Type definitions
+// src/types.ts
 export interface JMeterRecord {
     timeStamp: number;
     elapsed: number;
@@ -24,6 +24,12 @@ export interface JMeterRecord {
     threads: number;
   }
   
+  export interface DistributionData {
+    range: string;
+    count: number;
+    percentage: string;
+  }
+  
   export interface PerformanceStats extends Record<string, number | string> {
     totalRequests: number;
     successfulRequests: number;
@@ -44,11 +50,27 @@ export interface JMeterRecord {
     totalDataTransferred: string;
     avgThroughput: string;
     avgThreads: string;
+    totalBandwidthMbps: string;
+    avgBandwidthPerUser: string;
+    testDuration: string;
+    erroneousResponses: number;
+    successfulResponseRate: string;
   }
   
-  export interface DistributionData {
-    range: string;
+  export interface ErrorBreakdownData {
+    responseCode: number;
     count: number;
     percentage: string;
   }
   
+  export interface ThreadMetricsData {
+    timestamp: string;
+    threadCount: number;
+    avgResponseTime: number;
+  }
+  
+  export interface BandwidthMetricsData {
+    timestamp: string;
+    bytesPerSecond: number;
+    sentBytesPerSecond: number;
+  }
