@@ -1,3 +1,4 @@
+// src/components/Dashboard.tsx
 import React, { useState } from 'react';
 import { JMeterRecord } from '../types';
 import { processJMeterData, ProcessedData } from '../utils/DataProcessor';
@@ -9,6 +10,7 @@ import PercentileChart from './charts/PercentileChart';
 import ErrorRateChart from './charts/ErrorRateChart';
 import OutliersChart from './charts/OutliersChart';
 import DistributionChart from './charts/DistributionChart';
+import ThemeToggle from './ThemeToggle';
 
 const PerformanceDashboard: React.FC = () => {
   const [data, setData] = useState<ProcessedData | null>(null);
@@ -26,8 +28,8 @@ const PerformanceDashboard: React.FC = () => {
 
   if (error) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+      <div className="p-6 space-y-6 bg-white dark:bg-gray-900 min-h-screen transition-colors">
+        <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg p-4 text-red-700 dark:text-red-200">
           {error}
         </div>
         <FileUpload onFileLoad={handleFileLoad} onError={setError} />
@@ -37,7 +39,7 @@ const PerformanceDashboard: React.FC = () => {
 
   if (!data) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 bg-white dark:bg-gray-900 min-h-screen transition-colors">
         <FileUpload onFileLoad={handleFileLoad} onError={setError} />
       </div>
     );
@@ -46,15 +48,18 @@ const PerformanceDashboard: React.FC = () => {
   const { stats, timeSeriesData, percentileData, errorRateOverTime, responseTimeOutliers, distributionData } = data;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 bg-white dark:bg-gray-900 min-h-screen transition-colors">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Performance Test Dashboard</h1>
-        <button
-          onClick={() => setData(null)}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-        >
-          Upload New File
-        </button>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Performance Test Dashboard</h1>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          <button
+            onClick={() => setData(null)}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
+          >
+            Upload New File
+          </button>
+        </div>
       </div>
       
       {/* Key Stats Grid */}

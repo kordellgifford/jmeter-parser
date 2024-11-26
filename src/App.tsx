@@ -1,9 +1,13 @@
+// src/App.tsx
 import './App.css';
+import { ThemeProvider } from './contexts/ThemeContext';
 import PerformanceDashboard from './components/Dashboard';
 
 function App() {
   return (
-    <PerformanceDashboard />
+    <ThemeProvider>
+      <PerformanceDashboard />
+    </ThemeProvider>
   );
 }
 
